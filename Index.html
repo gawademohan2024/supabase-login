@@ -1,0 +1,294 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport"
+          content="width=device-width, initial-scale=1.0">
+
+    <title>Supabase Login and Server Time</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #f4f6f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            width: 350px;
+        }
+
+        h2 {
+            text-align: center;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            margin-top: 12px;
+            background: #3ecf8e;
+            color: #102a1d;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: wait;
+        }
+
+        #result {
+            margin-top: 20px;
+            text-align: center;
+            overflow-wrap: anywhere;
+            white-space: pre-line;
+        }
+
+        .success {
+            color: green;
+        }
+
+        .error {
+            color: red;
+        }
+
+        .info {
+            color: #555;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="container">
+
+    <h2>Supabase Login</h2>
+
+    <form id="loginForm">
+
+        <input
+            type="email"
+            id="email"
+            placeholder="Email"
+            value="test@example.com"
+            required
+        >
+
+        <input
+            type="password"
+            id="password"
+            placeholder="Password"
+            required
+        >
+
+        <button type="submit" id="loginButton">
+            Login
+        </button>
+
+    </form>
+
+    <div id="result"></div>
+
+</div>
+
+<script type="module">
+
+    import { createClient } from
+        "https://esm.sh/@supabase/supabase-js@2";
+
+    // --------------------------------------------------
+    // Supabase configuration
+    // --------------------------------------------------
+
+    const SUPABASE_URL =
+        "https://bhtxqctvglyxeywxzruj.supabase.co";
+
+    // Publishable key (safe for browser use).
+    // Replace with your project's actual key.
+    const SUPABASE_KEY =
+        "sb_publishable_39CiSY6qyZiiOf0-E4I_2Q_T9YK3B9W";
+
+    const supabase = createClient(
+        SUPABASE_URL,
+        SUPABASE_KEY
+    );
+
+    // --------------------------------------------------
+    // HTML elements
+    // --------------------------------------------------
+
+    const form =
+        document.getElementById("loginForm");
+
+    const result =
+        document.getElementById("result");
+
+    const loginButton =
+        document.getElementById("loginButton");
+
+    // --------------------------------------------------
+    // Login handler
+    // --------------------------------------------------
+
+    form.addEventListener("submit", async (event) => {
+
+        event.preventDefault();
+
+        const email =
+            document.getElementById("email").value.trim();
+
+        const password =
+            document.getElementById("password").value;
+
+        loginButton.disabled = true;
+
+        result.className = "info";
+        result.textContent = "Authenticating...";
+
+        try {
+
+            // STEP 1: Authenticate user
+
+            const { data: authData, error: authError } =
+                await supabase.auth.signInWithPassword({
+                    email: email,
+                    password: password
+                });
+
+            if (authError) {
+
+                console.error(
+                    "Authentication error:",
+                    authError
+                );
+
+                result.className = "error";
+
+                result.textContent =
+                    "Login failed: " +
+                    authError.message +
+                    " (HTTP " + authError.status + ")";
+
+                return;
+            }
+
+            console.log(
+                "Authenticated user:",
+                authData.user.email
+            );
+
+            result.className = "info";
+            result.textContent =
+                "Login successful.\nGetting server time...";
+
+            // STEP 2: Call Supabase Edge Function
+
+            const {
+                data: functionData,
+                error: functionError
+            } = await supabase.functions.invoke(
+                "rapid-processor"
+            );
+
+            if (functionError) {
+
+                console.error(
+                    "Edge Function error:",
+                    functionError
+                );
+
+                let details = functionError.message;
+
+                if (functionError.context instanceof Response) {
+
+                    const response = functionError.context;
+
+                    try {
+                        const body = await response.text();
+
+                        details +=
+                            ` (HTTP ${response.status}): ${body}`;
+
+                    } catch (_) {
+                        details +=
+                            ` (HTTP ${response.status})`;
+                    }
+                }
+
+                result.className = "error";
+
+                result.textContent =
+                    "Login successful, but Edge Function failed:\n" +
+                    details;
+
+                return;
+            }
+
+            // STEP 3: Display greeting and server time
+
+            console.log(
+                "Edge Function response:",
+                functionData
+            );
+
+            if (
+                !functionData ||
+                typeof functionData.greeting !== "string" ||
+                typeof functionData.message !== "string"
+            ) {
+                throw new Error(
+                    "Edge Function returned unexpected data: " +
+                    JSON.stringify(functionData)
+                );
+            }
+
+            result.className = "success";
+
+            result.textContent =
+                functionData.greeting + "\n" +
+                functionData.message;
+
+        } catch (err) {
+
+            console.error(
+                "Unexpected error:",
+                err
+            );
+
+            result.className = "error";
+
+            result.textContent =
+                "Error: " + err.message;
+
+        } finally {
+
+            loginButton.disabled = false;
+
+        }
+
+    });
+
+</script>
+
+</body>
+</html>
